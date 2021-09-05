@@ -1,0 +1,118 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+rm(list=ls())
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r input data & overview}
+library(dplyr)
+library(reshape2)
+library(lubridate)
+jf_invoice <- read.csv("C:/Users/caiwenli/Box Sync/Marketing Intelligence/Data Science/Clients/Jiffy Lube/Product Mix Analysis/R Inputs/invoice_12month.csv")
+
+jf_cat_detail <- read.csv("C:/Users/caiwenli/Box Sync/Marketing Intelligence/Data Science/Clients/Jiffy Lube/Product Mix Analysis/R Inputs/category_detail.csv")
+
+# check variables
+tbl_vars(jf_invoice)
+tbl_vars(jf_cat_detail)
+
+colnames(jf_cat_detail) <- c("old_cat", "dep", "dep_full", "class", "class_full", "line", "line_full", "line_type", "classification")
+
+columns <-c(8,16,17,19)
+
+jf_invoice[, columns] <- lapply(columns, function(x) as.numeric(jf_invoice[[x]]))
+
+jf_ser_per <- jf_invoice %>% 
+  group_by(Invoice_Detail_Type) %>% 
+  summarise(quantity = sum(Quantity_Sold),
+            transaction = n(),
+            ser_part_cost = sum(Service_Parts_Amount),
+            ser_labor_cost = sum(Service_Labor_Amount),
+            unit_sale = sum(Unit_Price)) %>% 
+  filter(!Invoice_Detail_Type %in% "") %>% 
+  mutate(per_tran = round(transaction/sum(transaction),2),
+         per_unit_sale = round(unit_sale/sum(unit_sale),2))
+
+write.csv(jf_ser_per, "C:/Users/caiwenli/Box Sync/Marketing Intelligence/Data Science/Clients/Jiffy Lube/Product Mix Analysis/R Outputs/jf_ser_per.csv")
+
+```
+
+```{r all descriptions & trends}
+jf_invoice_ser <- jf_invoice %>% 
+  filter(Invoice_Detail_Type %in% "SERVICE") %>% 
+  group_by(Invoice_Detail_Description, JLI_Category_Code, Invoice_Detail_Code, Store_Category_Code) %>%
+  summarise(unit_sale = sum(Unit_Price),
+            transaction = n(),
+            sale_per_tran = round(unit_sale/transaction,2)) %>% 
+  filter(!unit_sale %in% "0")
+
+jf_invoice$JLI_Category_Code <- as.character(jf_invoice$JLI_Category_Code)
+jf_cat_detail$line <- as.character(jf_cat_detail$line)
+
+jf_invoice_ser_line <- jf_invoice %>% 
+  filter(Invoice_Detail_Type %in% "SERVICE") %>% 
+  inner_join(jf_cat_detail, by = c("JLI_Category_Code" = "line")) %>% 
+  group_by(JLI_Category_Code, line_full, dep_full, class_full) %>%
+  summarise(unit_sale = sum(Unit_Price),
+            transaction = n(),
+            sale_per_tran = round(unit_sale/transaction,2)) %>% 
+  filter(!unit_sale %in% "0")
+
+
+jf_invoice$invoice_date_fix <- format(as.POSIXct(jf_invoice$Invoice_Date,format='%m/%d/%Y %H:%M:%S'),format='%Y-%m-%d',tz = "UTC")
+
+jf_invoice_ser_trend_line_wk <- jf_invoice %>% 
+  mutate(week = week(invoice_date_fix)) %>% 
+  filter(Invoice_Detail_Type %in% "SERVICE") %>% 
+  inner_join(jf_cat_detail, by = c("JLI_Category_Code" = "line")) %>% 
+  group_by(week, JLI_Category_Code, line_full, dep_full, class_full) %>%
+  summarise(unit_sale = sum(Unit_Price),
+            transaction = n(),
+            sale_per_tran = round(unit_sale/transaction,2)) %>% 
+  filter(!unit_sale %in% "0")
+
+jf_invoice_ser_trend_line_mth <- jf_invoice %>% 
+  mutate(month = month(invoice_date_fix)) %>% 
+  filter(Invoice_Detail_Type %in% "SERVICE") %>% 
+  inner_join(jf_cat_detail, by = c("JLI_Category_Code" = "line")) %>% 
+  group_by(month, JLI_Category_Code, line_full, dep_full, class_full) %>%
+  summarise(unit_sale = sum(Unit_Price),
+            transaction = n(),
+            sale_per_tran = round(unit_sale/transaction,2)) %>% 
+  filter(!unit_sale %in% "0")
+
+write.csv(jf_invoice_ser, "C:/Users/caiwenli/Box Sync/Marketing Intelligence/Data Science/Clients/Jiffy Lube/Product Mix Analysis/R Outputs/jf_invoice_ser.csv")
+
+write.csv(jf_invoice_ser_line, "C:/Users/caiwenli/Box Sync/Marketing Intelligence/Data Science/Clients/Jiffy Lube/Product Mix Analysis/R Outputs/jf_invoice_ser_line.csv")
+
+write.csv(jf_invoice_ser_trend_line_wk, "C:/Users/caiwenli/Box Sync/Marketing Intelligence/Data Science/Clients/Jiffy Lube/Product Mix Analysis/R Outputs/jf_invoice_ser_trend_line_wk.csv")
+
+write.csv(jf_invoice_ser_trend_line_mth, "C:/Users/caiwenli/Box Sync/Marketing Intelligence/Data Science/Clients/Jiffy Lube/Product Mix Analysis/R Outputs/jf_invoice_ser_trend_line_mth.csv")
+
+rm(jf_invoice_ser_trend_line)
+```
+
+```{r store level analysis}
+jf_store_detail <- read.csv("C:/Users/caiwenli/Box Sync/Marketing Intelligence/Data Science/Clients/Jiffy Lube/Product Mix Analysis/R Inputs/Store_ref.csv")
+
+jf_invoice$Store_Number <- as.character(jf_invoice$Store_Number)
+jf_store_detail$Store <- as.character(jf_store_detail$Store)
+
+jf_invoice_ser_store <- jf_invoice %>% 
+  inner_join(jf_store_detail, by = c("Store_Number" = "Store")) %>% # 40 transactions missing
+  filter(Invoice_Detail_Type %in% "SERVICE") %>% 
+  inner_join(jf_cat_detail, by = c("JLI_Category_Code" = "line")) %>% 
+  group_by(JLI_Category_Code, line_full, dep_full, class_full, Store_Category_Code, State, Market, SubGroup, Group, Zone) %>%
+  summarise(unit_sale = sum(Unit_Price),
+            transaction = n(),
+            sale_per_tran = round(unit_sale/transaction,2)) %>% 
+  filter(!unit_sale %in% "0")
+
+write.csv(jf_invoice_ser_store, "C:/Users/caiwenli/Box Sync/Marketing Intelligence/Data Science/Clients/Jiffy Lube/Product Mix Analysis/R Outputs/jf_invoice_ser_store.csv")
+
+```
+

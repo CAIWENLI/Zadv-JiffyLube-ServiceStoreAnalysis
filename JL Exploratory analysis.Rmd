@@ -1,0 +1,423 @@
+---
+title: "Jiffy Lube Exploratory analysis"
+author: "Marianne Rochet"
+date: "2/7/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Read data}
+
+gc <- read.csv("~/R/Projects/R-DCM/Clients/Jiffy Lube/Assets/Inputs/GC 2014 2018.csv")
+
+store_ref <- read.csv("~/R/Projects/R-DCM/Clients/Jiffy Lube/Assets/Inputs/Store_ref.csv")
+
+gc <- gc[,c("Location","Period","YEAR","Date","Net.Change")]
+
+names(gc) <- c("Store","Month","Year","Date","guestcount")
+
+gcstore <- sort(unique(gc$Store)) #3863 missing: new store
+
+storerefstore <- sort(unique(store_ref$Store)) #2469, 2604, 3345 missing
+
+
+gc <- merge(gc,store_ref, by="Store") 
+
+gc$Date <- as.Date(gc$Date,"%m/%d/%Y")
+
+gc <- gc[order(gc$Store,gc$Date),] 
+
+gcstore <- sort(unique(gc$Store)) #62 stores
+
+```
+
+```{r Same store set}
+
+storecount <- summarise(group_by(gc,Store),nbmonths=n_distinct(Date))
+
+samestore <- storecount[storecount$nbmonths==60,1] #52 stores
+
+gc_final <- merge(samestore,gc, by="Store")
+  
+```
+
+```{r Guest Count trends}
+
+library(dplyr)
+library(zoo)
+library(reshape2)
+
+
+# Trend total
+
+gc_total <- gc_final %>%
+  group_by(Date) %>% 
+  summarise(storecount=n_distinct(Store),guestcount=sum(guestcount)) %>% 
+  arrange(Date) %>% 
+  mutate(roll_gc = rollsum(x=guestcount, 12, align = "right", fill = NA))
+
+gc_trend_total <- gc_total %>%
+  arrange(Date) %>% 
+  filter(!is.na(roll_gc)) %>% 
+  mutate(trend_gc = roll_gc/first(roll_gc)-1)
+
+gc_comp <- gc_total %>%
+  arrange(Date) %>% 
+  filter(!is.na(roll_gc)) %>% 
+  filter(row_number()==1 | row_number()==n()) %>% 
+  mutate(Id=factor("Total")) %>% 
+  select(Id,Date,storecount,roll_gc)
+
+
+
+# Trend by state
+
+gc_state <- gc_final %>%
+  group_by(State,Date) %>% 
+  summarise(storecount=n_distinct(Store),guestcount=sum(guestcount)) %>% 
+  arrange(State,Date) %>% 
+  group_by(State) %>% 
+  mutate(roll_gc = rollsum(x=guestcount, 12, align = "right", fill = NA))
+
+gc_trend_state <- gc_state %>%
+  arrange(State,Date) %>% 
+  group_by(State) %>% 
+  filter(!is.na(roll_gc)) %>% 
+  mutate(trend_gc = roll_gc/first(roll_gc)-1)
+
+gc_trend_state2 <- dcast(gc_trend_state, Date ~ State, value.var = "trend_gc")
+
+gc_state_comp <- gc_state %>%
+  arrange(State,Date) %>% 
+  filter(!is.na(roll_gc)) %>% 
+  group_by(State) %>% 
+  filter(row_number()==1 | row_number()==n()) %>% 
+  select(Id=State,Date,storecount,roll_gc) %>% 
+  data.frame()
+
+
+
+# Trend by market
+
+gc_market <- gc_final %>%
+  group_by(Market,Date) %>% 
+  summarise(storecount=n_distinct(Store),guestcount=sum(guestcount)) %>% 
+  arrange(Market,Date) %>% 
+  group_by(Market) %>% 
+  mutate(roll_gc = rollsum(x=guestcount, 12, align = "right", fill = NA))
+
+gc_trend_market <- gc_market %>%
+  arrange(Market,Date) %>% 
+  group_by(Market) %>% 
+  filter(!is.na(roll_gc)) %>% 
+  mutate(trend_gc = roll_gc/first(roll_gc)-1)
+
+gc_trend_market2 <- dcast(gc_trend_market, Date ~ Market, value.var = "trend_gc")
+
+gc_market_comp <- gc_market %>%
+  arrange(Market,Date) %>% 
+  filter(!is.na(roll_gc)) %>% 
+  group_by(Market) %>% 
+  filter(row_number()==1 | row_number()==n()) %>% 
+  select(Id=Market,Date,storecount,roll_gc) %>% 
+  data.frame()
+
+# Trend by zone
+
+gc_zone <- gc_final %>%
+  group_by(Zone,Date) %>% 
+  summarise(storecount=n_distinct(Store),guestcount=sum(guestcount)) %>% 
+  arrange(Zone,Date) %>% 
+  group_by(Zone) %>% 
+  mutate(roll_gc = rollsum(x=guestcount, 12, align = "right", fill = NA))
+
+gc_trend_zone <- gc_zone %>%
+  arrange(Zone,Date) %>% 
+  group_by(Zone) %>% 
+  filter(!is.na(roll_gc)) %>% 
+  mutate(trend_gc = roll_gc/first(roll_gc)-1)
+
+gc_trend_zone2 <- dcast(gc_trend_zone, Date ~ Zone, value.var = "trend_gc")
+
+gc_zone_comp <- gc_zone %>%
+  arrange(Zone,Date) %>% 
+  filter(!is.na(roll_gc)) %>% 
+  group_by(Zone) %>% 
+  filter(row_number()==1 | row_number()==n()) %>% 
+  select(Id=Zone,Date,storecount,roll_gc) %>% 
+  data.frame()
+
+
+
+# Trend by group
+
+gc_group <- gc_final %>%
+  group_by(Group,Date) %>% 
+  summarise(storecount=n_distinct(Store),guestcount=sum(guestcount)) %>% 
+  arrange(Group,Date) %>% 
+  group_by(Group) %>% 
+  mutate(roll_gc = rollsum(x=guestcount, 12, align = "right", fill = NA))
+
+gc_trend_group <- gc_group %>%
+  arrange(Group,Date) %>% 
+  group_by(Group) %>% 
+  filter(!is.na(roll_gc)) %>% 
+  mutate(trend_gc = roll_gc/first(roll_gc)-1)
+
+gc_trend_group2 <- dcast(gc_trend_group, Date ~ Group, value.var = "trend_gc")
+
+gc_group_comp <- gc_group %>%
+  arrange(Group,Date) %>% 
+  filter(!is.na(roll_gc)) %>% 
+  group_by(Group) %>% 
+  filter(row_number()==1 | row_number()==n()) %>% 
+  select(Id=Group,Date,storecount,roll_gc) %>% 
+  data.frame()
+
+
+
+# Trend by store
+gc_store <- gc_final %>%
+  arrange(Store,Date) %>% 
+  group_by(Store) %>% 
+  mutate(roll_gc = rollsum(x=guestcount, 12, align = "right", fill = NA))
+
+gc_trend_store <- gc_store %>%
+  arrange(Store,Date) %>% 
+  group_by(Store) %>% 
+  filter(!is.na(roll_gc)) %>% 
+  mutate(trend_gc = roll_gc/first(roll_gc)-1)
+
+gc_store_comp <- gc_store %>%
+  arrange(Store,Date) %>% 
+  filter(!is.na(roll_gc)) %>% 
+  group_by(Store) %>% 
+  filter(row_number()==1 | row_number()==n()) %>% 
+  select(Store,Date,roll_gc) %>% 
+  data.frame()
+
+
+#Merge all
+
+gc_trend_final <- Reduce(function(x,y) merge(x = x, y = y, by = "Date"), list(gc_trend_total, gc_trend_state2, gc_trend_market2, gc_trend_zone2, gc_trend_group2))
+
+gc_comp_final <- rbind(gc_comp,gc_state_comp,gc_market_comp,gc_zone_comp,gc_group_comp)
+
+write.csv(gc_trend_final, "~/R/Projects/R-DCM/Clients/Jiffy Lube/Assets/Outputs/GC trends.csv")
+write.csv(gc_comp_final, "~/R/Projects/R-DCM/Clients/Jiffy Lube/Assets/Outputs/GC comps.csv")
+```
+
+```{r Store quartile}
+
+store_quartile <- dcast(gc_store_comp, Store ~ Date)
+
+store_quartile$comp <- store_quartile$`2018-12-31` / store_quartile$`2014-12-31` - 1
+
+store_quartile <- store_quartile[order(-store_quartile$comp),]
+
+store_quartile$quartile <- ntile(store_quartile$comp,4)
+
+store_quartile_sum <- summarise(group_by(store_quartile, quartile), storecount=n_distinct(Store), gc_2014=sum(`2014-12-31`), gc_2018=sum(`2018-12-31`) )
+
+store_quartile_sum$comp <- store_quartile_sum$gc_2018/store_quartile_sum$gc_2014-1
+
+store_quartile_final <- merge(store_quartile,store_ref, by="Store")
+
+write.csv(store_quartile_final, "~/R/Projects/R-DCM/Clients/Jiffy Lube/Assets/Outputs/Store comp.csv")
+
+```
+
+```{r Store quadrants}
+
+store_quad <- dcast(gc_store_comp, Store ~ Date)
+
+store_quad$comp <- store_quad$`2018-12-31` / store_quad$`2014-12-31` - 1
+
+comp_med <- median(store_quad$comp)
+
+store_quad$comp_group <- ntile(store_quad$comp,2)
+
+gc_med <- median(store_quad$`2018-12-31`)
+
+store_quad$gc_group <- ntile(store_quad$`2018-12-31`,2)
+
+store_quad_count <- summarise(group_by(store_quad, comp_group, gc_group), storecount=n_distinct(Store))
+
+store_quad_final <- merge(store_quad,store_ref, by="Store")
+
+write.csv(store_quad_final, "~/R/Projects/R-DCM/Clients/Jiffy Lube/Assets/Outputs/Store quad.csv")
+
+```
+
+```{r Seasonality}
+
+# By week 2018
+
+gcdaily <- read.csv("~/R/Projects/R-DCM/Clients/Jiffy Lube/Assets/Inputs/GC 2018 Daily.csv")
+
+gcdaily$Date <- as.Date(gcdaily$Date,"%m/%d/%Y")
+
+gcdaily <- melt(gcdaily, id.vars = "Date")
+
+gcdaily$Store <- substr(gcdaily$variable,2,5) 
+
+gcdaily$Week <- cut(gcdaily$Date, "week")
+
+gcdaily <- merge(samestore, gcdaily, by="Store")
+
+seasonality <- summarise(group_by(gcdaily,Week), gc=sum(value, na.rm=TRUE))
+
+write.csv(seasonality, "~/R/Projects/R-DCM/Clients/Jiffy Lube/Assets/Outputs/Seasonality.csv")
+
+# By month 18 vs 17
+
+seasonality_month <- summarise(group_by(gc_final,Year, Month), guestcount=sum(guestcount))
+
+```
+
+
+
+```{r Satisfaction}
+
+sat <- read.csv("~/R/Projects/R-DCM/Clients/Jiffy Lube/Assets/Inputs/store_satisfaction 2019 PP1.csv")
+
+store_profile <- merge(store_profile,sat, by.x="Store",by.y="STORE")
+
+sat_q <- summarise(group_by(store_profile, quartile),
+                   storecount=n_distinct(Store), 
+                   comp=sum(`2018-12-31`)/sum(`2014-12-31`) - 1,
+                   OVERALL.SATISFACTION=sum(OVERALL.SATISFACTION*Responses)/sum(Responses),
+                   Return..Oil.=sum(Return..Oil.*Responses)/sum(Responses),
+                   Return..Routine.=sum(Return..Routine.*Responses)/sum(Responses),
+                   Knowledgeable=sum(Knowledgeable*Responses)/sum(Responses),
+                   Friendly=sum(Friendly*Responses)/sum(Responses),
+                   Trusted=sum(Trusted*Responses)/sum(Responses),
+                   Timely=sum(Timely*Responses)/sum(Responses),
+                   Good.Value=sum(Good.Value*Responses)/sum(Responses),
+                   Well.Trained=sum(Well.Trained*Responses)/sum(Responses),
+                   Equipment=sum(Equipment*Responses)/sum(Responses),
+                   Surveys=sum(Surveys),
+                   Responses=sum(Responses))
+
+sat_q$resp_rate <- sat_q$Responses/sat_q$Surveys
+
+```
+
+```{r GC by day of week}
+
+gcdaily$dow <- weekdays(gcdaily$Date)
+
+dow_count <- gcdaily[gcdaily$Date>=as.Date("1/1/2018","%m/%d/%Y") & gcdaily$Date<=as.Date("12/30/2018","%m/%d/%Y"),]
+
+dow_count2 <- summarise(group_by(dow_count,dow), gc=sum(value, na.rm=TRUE))
+
+gcdaily$hours <- ifelse(gcdaily$dow %in% c("Monday","Tuesday","Wednesday", "Thursday", "Friday"),11,
+                        ifelse(gcdaily$dow == "Saturday",10,7))
+
+gcdaily$hours <- ifelse(gcdaily$dow %in% c("Monday","Tuesday","Wednesday", "Thursday", "Friday") & gcdaily$Store %in% c(3338,3341,3343),10,ifelse(gcdaily$dow %in% c("Monday","Tuesday","Wednesday", "Thursday", "Friday") & gcdaily$Store %in% c(149,228,951,873,1334),12, ifelse(gcdaily$dow == "Sunday" & gcdaily$Store %in% c(3338,3341,3343),0,gcdaily$hours)))
+
+
+dow_count3 <- summarise(group_by(dow_count,dow), gc_hour=sum(value, na.rm=TRUE)/sum(hours, na.rm=TRUE))
+
+summarise(dow_count, gc_hour=sum(value, na.rm=TRUE)/sum(hours, na.rm=TRUE))
+
+```
+
+```{r Store demo}
+
+demo <- read.csv("~/R/Projects/R-DCM/Clients/Jiffy Lube/Assets/Inputs/AJL_Demographics Raw.csv") 
+
+demo <- merge(store_quartile, demo, by.x="Store", by.y="store_number")
+
+quartile_profile <- summarise(group_by(demo, quartile),
+                         Population.Age.0.4=sum(X2018.Population.Age.0.4),                         
+                         Population.Age.5.9=sum(X2018.Population.Age.5.9),                         
+                         Population.Age.10.14=sum(X2018.Population.Age.10.14),                       
+                         Population.Age.15.19=sum(X2018.Population.Age.15.19),                       
+                         Population.Age.20.24=sum(X2018.Population.Age.20.24),                       
+                         Population.Age.25.29=sum(X2018.Population.Age.25.29),                       
+                         Population.Age.30.34=sum(X2018.Population.Age.30.34),                      
+                         Population.Age.35.39=sum(X2018.Population.Age.35.39),                      
+                         Population.Age.40.44=sum(X2018.Population.Age.40.44),                      
+                         Population.Age.45.49=sum(X2018.Population.Age.45.49),                      
+                         Population.Age.50.54=sum(X2018.Population.Age.50.54),                    
+                         Population.Age.55.59=sum(X2018.Population.Age.55.59),                       
+                         Population.Age.60.64=sum(X2018.Population.Age.60.64),                      
+                         Population.Age.65.69=sum(X2018.Population.Age.65.69),                      
+                         Population.Age.70.74=sum(X2018.Population.Age.70.74),                      
+                         Population.Age.75.79=sum(X2018.Population.Age.75.79),                      
+                         Population.Age.80.84=sum(X2018.Population.Age.80.84),                      
+                         White.Population=sum(X2018.White.Population),                          
+                         Black.Population=sum(X2018.Black.Population),                      
+                         American.Indian.Population=sum(X2018.American.Indian.Population),                 
+                         Asian.Population=sum(X2018.Asian.Population),                
+                         Pacific.Islander.Population=sum(X2018.Pacific.Islander.Population),                
+                         Other.Race.Population=sum(X2018.Other.Race.Population),                      
+                         Hispanic.Population=sum(X2018.Hispanic.Population),                     
+                         HH.Income...15000=sum(X2018.HH.Income...15000),                       
+                         HH.Income...15000.24999=sum(X2018.HH.Income..15000.24999),                     
+                         HH.Income...25000.34999=sum(X2018.HH.Income..25000.34999),                    
+                         HH.Income...35000.49999=sum(X2018.HH.Income..35000.49999),                    
+                         HH.Income...50000.74999=sum(X2018.HH.Income..50000.74999),                    
+                         HH.Income...75000.99999=sum(X2018.HH.Income..75000.99999),                    
+                         HH.Income...100000.149999=sum(X2018.HH.Income..100000.149999),                   
+                         HH.Income...150000.199999=sum(X2018.HH.Income..150000.199999),
+                         Span.No.English=sum(ACS.Pop.18.64.speak.Span.No.English),
+                         Span.English.NW=sum(ACS.Pop.18.64.speak.Span.English.NW),
+                         Span.English.VW.W=sum(ACS.Pop.18.64.speak.Span.English.VW.W),
+                         Only.English=sum(ACS.Pop.18.64.speak.Only.English),
+                         API.Language=sum(ACS.Pop.18.64.speak.API.Language),
+                         IE.Language=sum(ACS.Pop.18.64.speak.Indo.Eur),
+                         Oth.Language=sum(ACS.Pop.18.64.speak.Oth.Language))
+                      
+write.csv(quartile_profile,"~/R/Projects/R-DCM/Clients/Jiffy Lube/Assets/Outputs/Quartile profile.csv")
+
+demo2 <- merge(demo, store_ref, by="Store")
+
+store_type_profile <- summarise(group_by(demo2, Group),
+                         Population.Age.0.4=sum(X2018.Population.Age.0.4),                         
+                         Population.Age.5.9=sum(X2018.Population.Age.5.9),                         
+                         Population.Age.10.14=sum(X2018.Population.Age.10.14),                       
+                         Population.Age.15.19=sum(X2018.Population.Age.15.19),                       
+                         Population.Age.20.24=sum(X2018.Population.Age.20.24),                       
+                         Population.Age.25.29=sum(X2018.Population.Age.25.29),                       
+                         Population.Age.30.34=sum(X2018.Population.Age.30.34),                      
+                         Population.Age.35.39=sum(X2018.Population.Age.35.39),                      
+                         Population.Age.40.44=sum(X2018.Population.Age.40.44),                      
+                         Population.Age.45.49=sum(X2018.Population.Age.45.49),                      
+                         Population.Age.50.54=sum(X2018.Population.Age.50.54),                    
+                         Population.Age.55.59=sum(X2018.Population.Age.55.59),                       
+                         Population.Age.60.64=sum(X2018.Population.Age.60.64),                      
+                         Population.Age.65.69=sum(X2018.Population.Age.65.69),                      
+                         Population.Age.70.74=sum(X2018.Population.Age.70.74),                      
+                         Population.Age.75.79=sum(X2018.Population.Age.75.79),                      
+                         Population.Age.80.84=sum(X2018.Population.Age.80.84),                      
+                         White.Population=sum(X2018.White.Population),                          
+                         Black.Population=sum(X2018.Black.Population),                      
+                         American.Indian.Population=sum(X2018.American.Indian.Population),                 
+                         Asian.Population=sum(X2018.Asian.Population),                
+                         Pacific.Islander.Population=sum(X2018.Pacific.Islander.Population),                
+                         Other.Race.Population=sum(X2018.Other.Race.Population),                      
+                         Hispanic.Population=sum(X2018.Hispanic.Population),                     
+                         HH.Income...15000=sum(X2018.HH.Income...15000),                       
+                         HH.Income...15000.24999=sum(X2018.HH.Income..15000.24999),                     
+                         HH.Income...25000.34999=sum(X2018.HH.Income..25000.34999),                    
+                         HH.Income...35000.49999=sum(X2018.HH.Income..35000.49999),                    
+                         HH.Income...50000.74999=sum(X2018.HH.Income..50000.74999),                    
+                         HH.Income...75000.99999=sum(X2018.HH.Income..75000.99999),                    
+                         HH.Income...100000.149999=sum(X2018.HH.Income..100000.149999),                   
+                         HH.Income...150000.199999=sum(X2018.HH.Income..150000.199999),
+                         Span.No.English=sum(ACS.Pop.18.64.speak.Span.No.English),
+                         Span.English.NW=sum(ACS.Pop.18.64.speak.Span.English.NW),
+                         Span.English.VW.W=sum(ACS.Pop.18.64.speak.Span.English.VW.W),
+                         Only.English=sum(ACS.Pop.18.64.speak.Only.English),
+                         API.Language=sum(ACS.Pop.18.64.speak.API.Language),
+                         IE.Language=sum(ACS.Pop.18.64.speak.Indo.Eur),
+                         Oth.Language=sum(ACS.Pop.18.64.speak.Oth.Language))
+                      
+write.csv(store_type_profile,"~/R/Projects/R-DCM/Clients/Jiffy Lube/Assets/Outputs/Store type profile.csv")
+```
+
